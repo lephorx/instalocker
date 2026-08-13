@@ -25,6 +25,9 @@ terminal.
 git clone git@github.com:lephorx/instalocker.git
 cd instalocker
 pip install -r requirements.txt
+#setup environment. Example:
+python -m venv venv
+source venv/bin/activate
 uvicorn helper:app --port 13337
 ```
 
