@@ -256,7 +256,12 @@ async def agents():
     if not state.agents:
         state.agents = await asyncio.to_thread(load_agents)
     owned = state.owned_agent_uuids
-    return {"agents": [{**a, "owned": is_owned(a, owned)} for a in state.agents]}
+    enriched = [{**a, "owned": is_owned(a, owned)} for a in state.agents]
+    # Owned/unknown (pickable) first, definitely-locked last -- each group
+    # alphabetical. Sorted per-request rather than once, since ownership
+    # can change across reconnects.
+    enriched.sort(key=lambda a: (a["owned"] is False, a["name"]))
+    return {"agents": enriched}
 
 
 @app.post("/agent")
