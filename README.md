@@ -66,7 +66,9 @@ For reference (the val-skin-catch website is the intended client, but
 these are plain HTTP if you want to script against them yourself):
 
 - `GET /status` → `{connected, player_name, region, armed_agent, mode, last_locked}`
-- `GET /agents` → `{agents: [{name, uuid, portrait}, ...]}`
+- `GET /agents` → `{agents: [{name, uuid, portrait, owned}, ...]}` (`owned` is
+  `true`/`false` once connected, `null` if not known yet -- agents you
+  haven't unlocked on this account are unclickable in the website's grid)
 - `POST /agent {"agent": "jett", "mode": "lock"}` → arms an agent (`mode` is `"lock"` or `"select"`; omit to keep the current mode)
 - `DELETE /agent` → disarms
 

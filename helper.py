@@ -33,6 +33,12 @@ SHOOTER_LOG_PATH = os.path.expandvars(r"%LocalAppData%\VALORANT\Saved\Logs\Shoot
 POLL_INTERVAL_SECONDS = 1
 RECONNECT_INTERVAL_SECONDS = 5
 
+# Riot's well-known entitlement item-type UUID for "agent" -- used to ask
+# the store entitlements endpoint specifically which agents this account
+# owns (new agents need unlocking via XP/contract or purchase, they're
+# not all available from the start).
+AGENT_ITEM_TYPE = "01bb38e1-da47-4e6a-9b3d-945fe4655707"
+
 # Only these origins may control this local service from a browser -- not
 # a wildcard, since anything on localhost is otherwise reachable from any
 # page the user happens to have open, not just this site.
@@ -60,6 +66,11 @@ class State:
         self.armed_agent_uuid: Optional[str] = None
         self.mode: str = "lock"
         self.agents: list[dict] = []  # [{name, uuid, portrait}, ...]
+        # None = not fetched yet (e.g. not connected) -- distinct from an
+        # empty set, which would mean "owns nothing". Frontend treats
+        # None as "unknown, don't lock anyone out" rather than assuming
+        # nothing is owned.
+        self.owned_agent_uuids: Optional[set[str]] = None
         self.last_locked: Optional[str] = None
         self.seen_match_ids: set[str] = set()
 
@@ -96,6 +107,20 @@ def load_agents() -> list[dict]:
     ]
     agents.sort(key=lambda a: a["name"])
     return agents
+
+
+def fetch_owned_agent_uuids(client: Client) -> Optional[set[str]]:
+    """Best-effort -- if Riot's response shape doesn't match what's
+    expected here, fail open (return None, meaning "unknown") rather than
+    risk incorrectly locking the player out of agents they actually own."""
+    try:
+        data = client.store_fetch_entitlements(item_type=AGENT_ITEM_TYPE)
+        for entry in data.get("EntitlementsByTypes") or []:
+            if entry.get("ItemTypeID") == AGENT_ITEM_TYPE:
+                return {e["ItemID"] for e in entry.get("Entitlements") or [] if e.get("ItemID")}
+        return set()
+    except Exception:
+        return None
 
 
 async def lock_loop(client: Client) -> None:
@@ -144,6 +169,7 @@ async def connection_loop() -> None:
         state.connected = True
         state.player_name = client.player_name
         state.region = client.region
+        state.owned_agent_uuids = await asyncio.to_thread(fetch_owned_agent_uuids, client)
 
         try:
             await lock_loop(client)
@@ -151,6 +177,7 @@ async def connection_loop() -> None:
             pass  # connection dropped (match/session ended, client closed) -- reconnect
         finally:
             state.connected = False
+            state.owned_agent_uuids = None
             await asyncio.sleep(RECONNECT_INTERVAL_SECONDS)
 
 
@@ -200,7 +227,12 @@ async def status():
 async def agents():
     if not state.agents:
         state.agents = await asyncio.to_thread(load_agents)
-    return {"agents": state.agents}
+    owned = state.owned_agent_uuids
+    return {
+        "agents": [
+            {**a, "owned": None if owned is None else a["uuid"] in owned} for a in state.agents
+        ]
+    }
 
 
 @app.post("/agent")
@@ -221,6 +253,9 @@ async def set_agent(body: AgentRequest):
     agent = find_agent(body.agent)
     if not agent:
         raise HTTPException(status_code=400, detail=f"Unknown agent '{body.agent}'")
+
+    if state.owned_agent_uuids is not None and agent["uuid"] not in state.owned_agent_uuids:
+        raise HTTPException(status_code=400, detail=f"You don't own '{agent['name']}'")
 
     state.armed_agent = agent["name"]
     state.armed_agent_uuid = agent["uuid"]
