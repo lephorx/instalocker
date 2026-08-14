@@ -112,13 +112,28 @@ def load_agents() -> list[dict]:
 def fetch_owned_agent_uuids(client: Client) -> Optional[set[str]]:
     """Best-effort -- if Riot's response shape doesn't match what's
     expected here, fail open (return None, meaning "unknown") rather than
-    risk incorrectly locking the player out of agents they actually own."""
+    risk incorrectly locking the player out of agents they actually own.
+
+    Every real account owns several starting agents, so an empty result
+    is never actually correct -- it means parsing missed the real shape
+    (e.g. requesting a specific item_type in the URL may return the list
+    at the top level instead of wrapped in EntitlementsByTypes, depending
+    on the Riot API version), not that the account owns nothing. Treated
+    the same as a hard failure: fail open instead of locking everything.
+    """
     try:
         data = client.store_fetch_entitlements(item_type=AGENT_ITEM_TYPE)
+        entitlements = None
         for entry in data.get("EntitlementsByTypes") or []:
             if entry.get("ItemTypeID") == AGENT_ITEM_TYPE:
-                return {e["ItemID"] for e in entry.get("Entitlements") or [] if e.get("ItemID")}
-        return set()
+                entitlements = entry.get("Entitlements")
+                break
+        if entitlements is None:
+            entitlements = data.get("Entitlements")
+        if not entitlements:
+            return None
+        owned = {e["ItemID"] for e in entitlements if e.get("ItemID")}
+        return owned or None
     except Exception:
         return None
 
