@@ -53,18 +53,21 @@ Either way: leave it running in the background — it reconnects
 automatically whenever Valorant is open, across as many matches and game
 sessions as you like, so you only need to start it once. Then open
 val-skin-catch's **Instalock** tab: it detects the helper automatically,
-shows your connection status, and lets you pick which agent to arm. Once
-armed, it locks that agent every time you reach agent-select until you
-change or disarm it.
+shows your connection status, and gives you an agent-select screen with
+every agent's portrait. Choose **Instalock** (locks the instant
+agent-select starts) or **Select only** (picks the agent but leaves it
+unlocked, so you can still change your mind in-game) at the top, then
+click an agent to arm them in that mode. It re-applies automatically
+every time you reach agent-select until you change or disarm it.
 
 ## Local API
 
 For reference (the val-skin-catch website is the intended client, but
 these are plain HTTP if you want to script against them yourself):
 
-- `GET /status` → `{connected, player_name, region, armed_agent, last_locked}`
-- `GET /agents` → `{agents: [...]}`
-- `POST /agent {"agent": "jett"}` → arms an agent
+- `GET /status` → `{connected, player_name, region, armed_agent, mode, last_locked}`
+- `GET /agents` → `{agents: [{name, uuid, portrait}, ...]}`
+- `POST /agent {"agent": "jett", "mode": "lock"}` → arms an agent (`mode` is `"lock"` or `"select"`; omit to keep the current mode)
 - `DELETE /agent` → disarms
 
 Only requests from val-skin-catch's known origins are allowed (see

@@ -43,8 +43,12 @@ ALLOWED_ORIGINS = {
 }
 
 
+MODES = ("lock", "select")
+
+
 class AgentRequest(BaseModel):
     agent: Optional[str] = None
+    mode: Optional[str] = None  # "lock" (instalock) or "select" (pick only, don't lock)
 
 
 class State:
@@ -54,12 +58,18 @@ class State:
         self.region: Optional[str] = None
         self.armed_agent: Optional[str] = None
         self.armed_agent_uuid: Optional[str] = None
-        self.agents: dict[str, str] = {}  # lowercase display name -> uuid
+        self.mode: str = "lock"
+        self.agents: list[dict] = []  # [{name, uuid, portrait}, ...]
         self.last_locked: Optional[str] = None
         self.seen_match_ids: set[str] = set()
 
 
 state = State()
+
+
+def find_agent(name: str) -> Optional[dict]:
+    target = name.strip().lower()
+    return next((a for a in state.agents if a["name"].lower() == target), None)
 
 
 def detect_region() -> Optional[str]:
@@ -73,16 +83,26 @@ def detect_region() -> Optional[str]:
     return None
 
 
-def load_agents() -> dict[str, str]:
+def load_agents() -> list[dict]:
     res = requests.get(AGENTS_API_URL, timeout=10)
     res.raise_for_status()
-    return {a["displayName"].lower(): a["uuid"] for a in res.json()["data"]}
+    agents = [
+        {
+            "name": a["displayName"],
+            "uuid": a["uuid"],
+            "portrait": a.get("fullPortraitV2") or a.get("bustPortrait") or a.get("displayIcon"),
+        }
+        for a in res.json()["data"]
+    ]
+    agents.sort(key=lambda a: a["name"])
+    return agents
 
 
 async def lock_loop(client: Client) -> None:
     """Runs for as long as the Riot Client connection stays alive --
-    auto-locks the armed agent for every match reached, not just the
-    first one, and picks up agent changes made from the website mid-loop."""
+    auto-locks (or just selects, in "select" mode) the armed agent for
+    every match reached, not just the first one, and picks up agent/mode
+    changes made from the website mid-loop."""
     while True:
         presence = await asyncio.to_thread(client.fetch_presence, client.puuid)
         match_state = presence.get("matchPresenceData", {}).get("sessionLoopState")
@@ -91,7 +111,10 @@ async def lock_loop(client: Client) -> None:
             match_id = match.get("ID")
             if match_id and match_id not in state.seen_match_ids:
                 state.seen_match_ids.add(match_id)
-                await asyncio.to_thread(client.pregame_lock_character, state.armed_agent_uuid)
+                if state.mode == "select":
+                    await asyncio.to_thread(client.pregame_select_character, state.armed_agent_uuid)
+                else:
+                    await asyncio.to_thread(client.pregame_lock_character, state.armed_agent_uuid)
                 state.last_locked = state.armed_agent
         await asyncio.sleep(POLL_INTERVAL_SECONDS)
 
@@ -168,6 +191,7 @@ async def status():
         "player_name": state.player_name,
         "region": state.region,
         "armed_agent": state.armed_agent,
+        "mode": state.mode,
         "last_locked": state.last_locked,
     }
 
@@ -176,7 +200,7 @@ async def status():
 async def agents():
     if not state.agents:
         state.agents = await asyncio.to_thread(load_agents)
-    return {"agents": sorted(state.agents.keys())}
+    return {"agents": state.agents}
 
 
 @app.post("/agent")
@@ -184,22 +208,27 @@ async def set_agent(body: AgentRequest):
     if body.agent is None:
         state.armed_agent = None
         state.armed_agent_uuid = None
-        return {"armed_agent": None}
+        return {"armed_agent": None, "mode": state.mode}
+
+    if body.mode is not None:
+        if body.mode not in MODES:
+            raise HTTPException(status_code=400, detail=f"mode must be one of {MODES}")
+        state.mode = body.mode
 
     if not state.agents:
         state.agents = await asyncio.to_thread(load_agents)
 
-    uuid = state.agents.get(body.agent.strip().lower())
-    if not uuid:
+    agent = find_agent(body.agent)
+    if not agent:
         raise HTTPException(status_code=400, detail=f"Unknown agent '{body.agent}'")
 
-    state.armed_agent = body.agent.strip().lower()
-    state.armed_agent_uuid = uuid
-    return {"armed_agent": state.armed_agent}
+    state.armed_agent = agent["name"]
+    state.armed_agent_uuid = agent["uuid"]
+    return {"armed_agent": state.armed_agent, "mode": state.mode}
 
 
 @app.delete("/agent")
 async def clear_agent():
     state.armed_agent = None
     state.armed_agent_uuid = None
-    return {"armed_agent": None}
+    return {"armed_agent": None, "mode": state.mode}
