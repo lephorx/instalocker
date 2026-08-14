@@ -1,0 +1,49 @@
+name: Build and release Windows executable
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build standalone exe
+        run: >
+          pyinstaller --onefile --name instalocker --console
+          --hidden-import=uvicorn.logging
+          --hidden-import=uvicorn.loops
+          --hidden-import=uvicorn.loops.auto
+          --hidden-import=uvicorn.protocols
+          --hidden-import=uvicorn.protocols.http
+          --hidden-import=uvicorn.protocols.http.auto
+          --hidden-import=uvicorn.protocols.websockets
+          --hidden-import=uvicorn.protocols.websockets.auto
+          --hidden-import=uvicorn.lifespan
+          --hidden-import=uvicorn.lifespan.on
+          --collect-all valclient
+          --collect-data certifi
+          run.py
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ github.ref_name }}" dist/instalocker.exe `
+            --title "${{ github.ref_name }}" `
+            --generate-notes

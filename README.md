@@ -19,25 +19,43 @@ support, etc.). This is a deliberately minimal port — just the core
 lock-on-select mechanism, controlled via a tiny local API instead of a
 terminal.
 
-## Setup
+## Setup (Windows, one click)
+
+Download `instalocker.exe` from the
+[latest release](https://github.com/lephorx/instalocker/releases/latest)
+and double-click it. No Python needed. A console window opens and stays
+open while it runs — that's normal, just leave it be while you play.
+
+Windows SmartScreen may warn about it since the .exe isn't code-signed
+(no cert for that) — click "More info" → "Run anyway".
+
+## Setup (from source)
+
+For other platforms, or if you'd rather run it from source:
 
 ```bash
 git clone git@github.com:lephorx/instalocker.git
 cd instalocker
-pip install -r requirements.txt
-#setup environment. Example:
+
+# set up environment. Example:
 python -m venv venv
-source venv/bin/activate
-uvicorn helper:app --port 13337
+source venv/bin/activate   # Windows: venv\Scripts\activate
+
+pip install -r requirements.txt
+python run.py
 ```
 
-Requires Python 3.9+. Leave it running in the background — it
-reconnects automatically whenever Valorant is open, across as many
-matches and game sessions as you like, so you only need to start it
-once. Then open val-skin-catch's **Instalock** tab: it detects the
-helper automatically, shows your connection status, and lets you pick
-which agent to arm. Once armed, it locks that agent every time you reach
-agent-select until you change or disarm it.
+Requires Python 3.9+. On Windows you can also just double-click
+`run.bat`, which does the venv/install steps above automatically on
+first run.
+
+Either way: leave it running in the background — it reconnects
+automatically whenever Valorant is open, across as many matches and game
+sessions as you like, so you only need to start it once. Then open
+val-skin-catch's **Instalock** tab: it detects the helper automatically,
+shows your connection status, and lets you pick which agent to arm. Once
+armed, it locks that agent every time you reach agent-select until you
+change or disarm it.
 
 ## Local API
 
