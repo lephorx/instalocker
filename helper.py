@@ -102,6 +102,11 @@ def load_agents() -> list[dict]:
             "name": a["displayName"],
             "uuid": a["uuid"],
             "portrait": a.get("fullPortraitV2") or a.get("bustPortrait") or a.get("displayIcon"),
+            # The original launch roster (Brimstone/Jett/Phoenix/Sage/Sova)
+            # is owned by every account from creation -- Riot never grants
+            # an explicit store entitlement for these, so they'd otherwise
+            # show up as locked despite always being playable.
+            "base_content": bool(a.get("isBaseContent")),
         }
         for a in res.json()["data"]
     ]
@@ -238,16 +243,20 @@ async def status():
     }
 
 
+def is_owned(agent: dict, owned_uuids: Optional[set[str]]) -> Optional[bool]:
+    if agent["base_content"]:
+        return True
+    if owned_uuids is None:
+        return None
+    return agent["uuid"] in owned_uuids
+
+
 @app.get("/agents")
 async def agents():
     if not state.agents:
         state.agents = await asyncio.to_thread(load_agents)
     owned = state.owned_agent_uuids
-    return {
-        "agents": [
-            {**a, "owned": None if owned is None else a["uuid"] in owned} for a in state.agents
-        ]
-    }
+    return {"agents": [{**a, "owned": is_owned(a, owned)} for a in state.agents]}
 
 
 @app.post("/agent")
@@ -269,7 +278,7 @@ async def set_agent(body: AgentRequest):
     if not agent:
         raise HTTPException(status_code=400, detail=f"Unknown agent '{body.agent}'")
 
-    if state.owned_agent_uuids is not None and agent["uuid"] not in state.owned_agent_uuids:
+    if is_owned(agent, state.owned_agent_uuids) is False:
         raise HTTPException(status_code=400, detail=f"You don't own '{agent['name']}'")
 
     state.armed_agent = agent["name"]
