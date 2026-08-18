@@ -57,20 +57,41 @@ shows your connection status, and gives you an agent-select screen with
 every agent's portrait. Choose **Instalock** (locks the instant
 agent-select starts) or **Select only** (picks the agent but leaves it
 unlocked, so you can still change your mind in-game) at the top, then
-click an agent to arm them in that mode. It re-applies automatically
-every time you reach agent-select until you change or disarm it.
+click agents to build a priority order — if your first pick is already
+taken by a teammate, the next one in your list is tried instead. It
+re-applies automatically every time you reach agent-select until you
+change or disarm it.
+
+**Map-based profiles**: tick "Use map-based profiles" and pick a map from
+the dropdown to build a separate agent chain just for that map (e.g.
+always try Jett→Reyna on Ascent, Sova→Cypher on Icebox). While enabled,
+whichever map you're actually on takes priority over the global chain;
+maps with no profile set fall back to it.
+
+**Dodge**: a "Dodge this match" button appears whenever you're in
+agent-select, in case you want out of a bad lobby without alt-tabbing.
+Confirms before acting since it counts as a real dodge (queue penalty
+and all) — this doesn't bypass that, just saves you leaving the game.
 
 ## Local API
 
 For reference (the val-skin-catch website is the intended client, but
 these are plain HTTP if you want to script against them yourself):
 
-- `GET /status` → `{connected, player_name, region, armed_agent, mode, last_locked}`
-- `GET /agents` → `{agents: [{name, uuid, portrait, owned}, ...]}` (`owned` is
+- `GET /status` → `{connected, player_name, region, agent_chain, mode, map_profiles_enabled, current_map, in_pregame, last_locked}`
+- `GET /agents` → `{agents: [{name, uuid, portrait, base_content, owned}, ...]}` (`owned` is
   `true`/`false` once connected, `null` if not known yet -- agents you
   haven't unlocked on this account are unclickable in the website's grid)
-- `POST /agent {"agent": "jett", "mode": "lock"}` → arms an agent (`mode` is `"lock"` or `"select"`; omit to keep the current mode)
+- `GET /maps` → `{maps: [{name, url}, ...]}`
+- `POST /agent {"agents": ["jett", "reyna"], "mode": "lock"}` → arms an ordered fallback
+  chain (`mode` is `"lock"` or `"select"`; omit to keep the current mode). A
+  single-item array is a plain instalock.
 - `DELETE /agent` → disarms
+- `GET /map-profiles` → `{map_profiles: {"<map url>": ["jett", ...]}, enabled}`
+- `POST /map-profile {"map_url": "...", "agents": ["sova", "cypher"]}` → sets a map's
+  chain (empty `agents` clears it)
+- `POST /map-profiles/toggle {"enabled": true}` → turns map-based selection on/off
+- `POST /dodge` → quits the current pregame match (only works while actually in agent-select)
 
 Only requests from val-skin-catch's known origins are allowed (see
 `ALLOWED_ORIGINS` in `helper.py`) — not a wildcard, since anything
