@@ -57,10 +57,10 @@ shows your connection status, and gives you an agent-select screen with
 every agent's portrait. Choose **Instalock** (locks the instant
 agent-select starts) or **Select only** (picks the agent but leaves it
 unlocked, so you can still change your mind in-game) at the top, then
-click agents to build a priority order — if your first pick is already
-taken by a teammate, the next one in your list is tried instead. It
-re-applies automatically every time you reach agent-select until you
-change or disarm it.
+click agents to build a priority order (drag the chips to reorder) — if
+your first pick is already taken by a teammate, the next one in your
+list is tried instead. It re-applies automatically every time you reach
+agent-select until you change or disarm it.
 
 **Map-based profiles**: tick "Use map-based profiles" and pick a map from
 the dropdown to build a separate agent chain just for that map (e.g.
